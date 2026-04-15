@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { swaggerUI } from '@hono/swagger-ui';
-import { openAPISpecs } from 'hono-openapi';
+import { openAPIRouteHandler } from 'hono-openapi';
 import sessions from './sessions';
 import messages from './messages';
 import parts from './parts';
@@ -20,7 +20,7 @@ app.route('/', parts);
 
 app.get(
   '/openapi.json',
-  openAPISpecs(app, {
+  openAPIRouteHandler(app, {
     documentation: {
       info: {
         title: 'Agent Session API',

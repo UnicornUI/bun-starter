@@ -1,10 +1,7 @@
-import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { describeRoute } from 'hono-openapi';
-import { resolver } from 'hono-openapi/zod';
+import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
-import { db, schema } from '../db';
+import { messageServiceInstance } from '../services';
 
 const app = new Hono();
 
@@ -16,7 +13,7 @@ const MessageSchema = z.object({
   content: z.string(),
   data: z.string().nullable(),
   createdAt: z.string(),
-});
+}).meta({ id: 'Message' });
 
 const CreateMessageSchema = z.object({
   subSessionId: z.number(),
@@ -24,17 +21,17 @@ const CreateMessageSchema = z.object({
   content: z.string(),
   data: z.string().optional(),
   parentId: z.number().optional(),
-});
+}).meta({ id: 'CreateMessage' });
 
 const UpdateMessageSchema = z.object({
   content: z.string().optional(),
   data: z.string().optional(),
-});
+}).meta({ id: 'UpdateMessage' });
 
-const MessageQuery = z.object({
+const MessageQuerySchema = z.object({
   subSessionId: z.string().optional(),
   parentId: z.string().optional(),
-});
+}).meta({ id: 'MessageQuery' });
 
 app.get(
   '/api/messages',
@@ -42,19 +39,11 @@ app.get(
     summary: 'Get messages',
     responses: { 200: { description: 'Messages list', content: { 'application/json': { schema: resolver(z.array(MessageSchema)) } } } },
   }),
-  zValidator('query', MessageQuery),
+  zValidator('query', MessageQuerySchema),
   async (c) => {
     const { subSessionId, parentId } = c.req.valid('query');
-    let result: typeof schema.messages.$inferSelect[] = [];
-
-    if (subSessionId) {
-      result = await db.select().from(schema.messages).where(eq(schema.messages.subSessionId, parseInt(subSessionId)));
-    } else if (parentId) {
-      result = await db.select().from(schema.messages).where(eq(schema.messages.parentId, parseInt(parentId)));
-    } else {
-      result = await db.select().from(schema.messages);
-    }
-    return c.json(result.map(m => ({ ...m, createdAt: m.createdAt.toISOString() })));
+    const messages = await messageServiceInstance.findAll({ subSessionId, parentId });
+    return c.json(messages);
   }
 );
 
@@ -67,8 +56,8 @@ app.post(
   zValidator('json', CreateMessageSchema),
   async (c) => {
     const data = c.req.valid('json');
-    const [message] = await db.insert(schema.messages).values({ ...data, createdAt: new Date() }).returning();
-    return c.json({ ...message, createdAt: message.createdAt.toISOString() }, 201);
+    const message = await messageServiceInstance.create(data);
+    return c.json(message, 201);
   }
 );
 
@@ -84,9 +73,15 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    const [message] = await db.select().from(schema.messages).where(eq(schema.messages.id, parseInt(id))).limit(1);
-    if (!message) return c.json({ error: 'Message not found' }, 404);
-    return c.json({ ...message, createdAt: message.createdAt.toISOString() });
+    try {
+      const message = await messageServiceInstance.findById(parseInt(id));
+      return c.json(message);
+    } catch (error) {
+      if (error._tag === 'MessageNotFoundError') {
+        return c.json({ error: 'Message not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 
@@ -104,9 +99,15 @@ app.put(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    const [message] = await db.update(schema.messages).set(data).where(eq(schema.messages.id, parseInt(id))).returning();
-    if (!message) return c.json({ error: 'Message not found' }, 404);
-    return c.json({ ...message, createdAt: message.createdAt.toISOString() });
+    try {
+      const message = await messageServiceInstance.update(parseInt(id), data);
+      return c.json(message);
+    } catch (error) {
+      if (error._tag === 'MessageNotFoundError') {
+        return c.json({ error: 'Message not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 
@@ -116,8 +117,15 @@ app.delete(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    await db.delete(schema.messages).where(eq(schema.messages.id, parseInt(id)));
-    return c.json({ success: true });
+    try {
+      await messageServiceInstance.delete(parseInt(id));
+      return c.json({ success: true });
+    } catch (error) {
+      if (error._tag === 'MessageNotFoundError') {
+        return c.json({ error: 'Message not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 
@@ -130,8 +138,8 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    const result = await db.select().from(schema.messages).where(eq(schema.messages.parentId, parseInt(id)));
-    return c.json(result.map(m => ({ ...m, createdAt: m.createdAt.toISOString() })));
+    const messages = await messageServiceInstance.findReplies(parseInt(id));
+    return c.json(messages);
   }
 );
 
@@ -146,8 +154,12 @@ app.post(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    const [message] = await db.insert(schema.messages).values({ ...data, parentId: parseInt(id), createdAt: new Date() }).returning();
-    return c.json({ ...message, createdAt: message.createdAt.toISOString() }, 201);
+    const messageData = {
+      ...data,
+      parentId: parseInt(id)
+    };
+    const message = await messageServiceInstance.create(messageData);
+    return c.json(message, 201);
   }
 );
 

@@ -1,3 +1,4 @@
+import 'zod-openapi';
 import chalk from 'chalk';
 import app from '../../routes/app';
 
@@ -32,7 +33,7 @@ export const serveCommand = {
 
     console.log('');
     console.log(chalk.cyan('╔═══════════════════════════════════════════════════╗'));
-    console.log(chalk.cyan('║  ') + chalk.bold.green('  Server starting...  ') + chalk.cyan('║'));
+    console.log(chalk.cyan('║  ') + chalk.bold.green('Server starting...                       ') + chalk.cyan('║'));
     console.log(chalk.cyan('║  ') + chalk.yellow(`Host: ${host}`) + chalk.cyan(' '.repeat(43 - host.length)) + '║');
     console.log(chalk.cyan('║  ') + chalk.yellow(`Port: ${port}`) + chalk.cyan(' '.repeat(44 - port.toString().length)) + '║');
     console.log(chalk.cyan('║  ') + chalk.blue(`API:  http://${host}:${port}/`) + chalk.cyan(' '.repeat(29)) + '║');
@@ -43,12 +44,14 @@ export const serveCommand = {
     console.log(chalk.cyan('╚═══════════════════════════════════════════════════╝'));
     console.log('');
 
-    Bun.serve({
+    const server = Bun.serve({
       port,
       hostname: host,
       fetch: app.fetch,
     });
 
     console.log(chalk.green(`✓ Server running at http://${host}:${port}`));
+    // Keep the server running indefinitely
+    setInterval(() => {}, 1000);
   },
 };

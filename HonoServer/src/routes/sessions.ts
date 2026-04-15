@@ -1,10 +1,7 @@
-import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { describeRoute } from 'hono-openapi';
-import { resolver } from 'hono-openapi/zod';
+import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
-import { db, schema } from '../db';
+import { sessionServiceInstance } from '../services/session.service';
 
 const app = new Hono();
 
@@ -16,50 +13,40 @@ const SessionSchema = z.object({
   data: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
-});
+}).meta({ id: 'Session' });
 
 const CreateSessionSchema = z.object({
   title: z.string().min(1),
   agentId: z.string().min(1),
   data: z.string().optional(),
   parentId: z.number().optional(),
-});
+}).meta({ id: 'CreateSession' });
 
 const UpdateSessionSchema = z.object({
   title: z.string().min(1).optional(),
   data: z.string().optional(),
-});
+}).meta({ id: 'UpdateSession' });
 
 const SessionListQuery = z.object({
   agentId: z.string().optional(),
   parentId: z.string().optional(),
-});
+}).meta({ id: 'SessionListQuery' });
+
+const IdParam = z.object({ id: z.string() });
 
 app.get(
   '/api/sessions',
   describeRoute({
     summary: 'Get sessions list',
     responses: {
-      200: { description: 'Sessions list', content: { 'application/json': { schema: resolver(SessionSchema) } } },
+      200: { description: 'Sessions list', content: { 'application/json': { schema: resolver(z.array(SessionSchema)) } } },
     },
   }),
   zValidator('query', SessionListQuery),
   async (c) => {
     const { agentId, parentId } = c.req.valid('query');
-    let result: typeof schema.sessions.$inferSelect[] = [];
-
-    if (agentId && parentId) {
-      result = await db.select().from(schema.sessions).where(eq(schema.sessions.agentId, agentId));
-      result = result.filter(s => s.parentId === (parentId ? parseInt(parentId) : null));
-    } else if (agentId) {
-      result = await db.select().from(schema.sessions).where(eq(schema.sessions.agentId, agentId));
-    } else if (parentId) {
-      result = await db.select().from(schema.sessions).where(eq(schema.sessions.parentId, parseInt(parentId)));
-    } else {
-      result = await db.select().from(schema.sessions);
-    }
-
-    return c.json(result.map(s => ({ ...s, createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString() })));
+    const sessions = await sessionServiceInstance.findAll({ agentId, parentId });
+    return c.json(sessions);
   }
 );
 
@@ -67,21 +54,15 @@ app.post(
   '/api/sessions',
   describeRoute({
     summary: 'Create session',
-    responses: { 
-      201: { 
-        description: 'Session created', 
-        content: { 'application/json': { schema: resolver(SessionSchema) } } 
-      } 
+    responses: {
+      201: { description: 'Session created', content: { 'application/json': { schema: resolver(SessionSchema) } } },
     },
   }),
   zValidator('json', CreateSessionSchema),
   async (c) => {
     const data = c.req.valid('json');
-    const [session] = await db
-      .insert(schema.sessions)
-      .values({ ...data, createdAt: new Date(), updatedAt: new Date() })
-      .returning();
-    return c.json({ ...session, createdAt: session.createdAt.toISOString(), updatedAt: session.updatedAt.toISOString() }, 201);
+    const session = await sessionServiceInstance.create(data);
+    return c.json(session, 201);
   }
 );
 
@@ -94,12 +75,18 @@ app.get(
       404: { description: 'Not found' },
     },
   }),
-  zValidator('param', z.object({ id: z.string() })),
+  zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    const [session] = await db.select().from(schema.sessions).where(eq(schema.sessions.id, parseInt(id))).limit(1);
-    if (!session) return c.json({ error: 'Session not found' }, 404);
-    return c.json({ ...session, createdAt: session.createdAt.toISOString(), updatedAt: session.updatedAt.toISOString() });
+    try {
+      const session = await sessionServiceInstance.findById(parseInt(id));
+      return c.json(session);
+    } catch (error) {
+      if (error._tag === 'SessionNotFoundError') {
+        return c.json({ error: 'Session not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 
@@ -112,25 +99,38 @@ app.put(
       404: { description: 'Not found' },
     },
   }),
-  zValidator('param', z.object({ id: z.string() })),
+  zValidator('param', IdParam),
   zValidator('json', UpdateSessionSchema),
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    const [session] = await db.update(schema.sessions).set({ ...data, updatedAt: new Date() }).where(eq(schema.sessions.id, parseInt(id))).returning();
-    if (!session) return c.json({ error: 'Session not found' }, 404);
-    return c.json({ ...session, createdAt: session.createdAt.toISOString(), updatedAt: session.updatedAt.toISOString() });
+    try {
+      const session = await sessionServiceInstance.update(parseInt(id), data);
+      return c.json(session);
+    } catch (error) {
+      if (error._tag === 'SessionNotFoundError') {
+        return c.json({ error: 'Session not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 
 app.delete(
   '/api/sessions/:id',
   describeRoute({ summary: 'Delete session', responses: { 200: { description: 'Deleted' } } }),
-  zValidator('param', z.object({ id: z.string() })),
+  zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    await db.delete(schema.sessions).where(eq(schema.sessions.id, parseInt(id)));
-    return c.json({ success: true });
+    try {
+      await sessionServiceInstance.delete(parseInt(id));
+      return c.json({ success: true });
+    } catch (error) {
+      if (error._tag === 'SessionNotFoundError') {
+        return c.json({ error: 'Session not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 
@@ -140,11 +140,11 @@ app.get(
     summary: 'Get sub-sessions',
     responses: { 200: { description: 'Sub-sessions', content: { 'application/json': { schema: resolver(z.array(SessionSchema)) } } } },
   }),
-  zValidator('param', z.object({ id: z.string() })),
+  zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    const result = await db.select().from(schema.sessions).where(eq(schema.sessions.parentId, parseInt(id)));
-    return c.json(result.map(s => ({ ...s, createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString() })));
+    const sessions = await sessionServiceInstance.findChildren(parseInt(id));
+    return c.json(sessions);
   }
 );
 
@@ -154,13 +154,17 @@ app.post(
     summary: 'Create sub-session',
     responses: { 201: { description: 'Sub-session created', content: { 'application/json': { schema: resolver(SessionSchema) } } } },
   }),
-  zValidator('param', z.object({ id: z.string() })),
+  zValidator('param', IdParam),
   zValidator('json', CreateSessionSchema),
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    const [session] = await db.insert(schema.sessions).values({ ...data, parentId: parseInt(id), createdAt: new Date(), updatedAt: new Date() }).returning();
-    return c.json({ ...session, createdAt: session.createdAt.toISOString(), updatedAt: session.updatedAt.toISOString() }, 201);
+    const sessionData = {
+      ...data,
+      parentId: parseInt(id)
+    };
+    const session = await sessionServiceInstance.create(sessionData);
+    return c.json(session, 201);
   }
 );
 

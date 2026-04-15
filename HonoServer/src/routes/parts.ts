@@ -1,10 +1,7 @@
-import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { describeRoute } from 'hono-openapi';
-import { resolver } from 'hono-openapi/zod';
+import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
-import { db, schema } from '../db';
+import { msgPartServiceInstance } from '../services';
 
 const app = new Hono();
 
@@ -16,21 +13,21 @@ const MsgPartSchema = z.object({
   metadata: z.string().nullable(),
   endTime: z.string().nullable(),
   createdAt: z.string(),
-});
+}).meta({ id: 'MsgPart' });
 
 const CreateMsgPartSchema = z.object({
   type: z.string().min(1),
   content: z.string().optional(),
   metadata: z.string().optional(),
   endTime: z.string().optional(),
-});
+}).meta({ id: 'CreateMsgPart' });
 
 const UpdateMsgPartSchema = z.object({
   type: z.string().min(1).optional(),
   content: z.string().optional(),
   metadata: z.string().optional(),
   endTime: z.string().optional(),
-});
+}).meta({ id: 'UpdateMsgPart' });
 
 app.get(
   '/api/parts/message/:messageId',
@@ -41,12 +38,8 @@ app.get(
   zValidator('param', z.object({ messageId: z.string() })),
   async (c) => {
     const { messageId } = c.req.valid('param');
-    const result = await db.select().from(schema.msgParts).where(eq(schema.msgParts.messageId, parseInt(messageId)));
-    return c.json(result.map(p => ({
-      ...p,
-      endTime: p.endTime?.toISOString() ?? null,
-      createdAt: p.createdAt.toISOString(),
-    })));
+    const msgParts = await msgPartServiceInstance.findByMessageId(parseInt(messageId));
+    return c.json(msgParts);
   }
 );
 
@@ -61,17 +54,8 @@ app.post(
   async (c) => {
     const { messageId } = c.req.valid('param');
     const data = c.req.valid('json');
-    const [msgPart] = await db.insert(schema.msgParts).values({
-      messageId: parseInt(messageId),
-      ...data,
-      endTime: data.endTime ? new Date(data.endTime) : null,
-      createdAt: new Date(),
-    }).returning();
-    return c.json({
-      ...msgPart,
-      endTime: msgPart.endTime?.toISOString() ?? null,
-      createdAt: msgPart.createdAt.toISOString(),
-    }, 201);
+    const msgPart = await msgPartServiceInstance.create(parseInt(messageId), data);
+    return c.json(msgPart, 201);
   }
 );
 
@@ -87,13 +71,15 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    const [msgPart] = await db.select().from(schema.msgParts).where(eq(schema.msgParts.id, parseInt(id))).limit(1);
-    if (!msgPart) return c.json({ error: 'MsgPart not found' }, 404);
-    return c.json({
-      ...msgPart,
-      endTime: msgPart.endTime?.toISOString() ?? null,
-      createdAt: msgPart.createdAt.toISOString(),
-    });
+    try {
+      const msgPart = await msgPartServiceInstance.findById(parseInt(id));
+      return c.json(msgPart);
+    } catch (error) {
+      if (error._tag === 'MsgPartNotFoundError') {
+        return c.json({ error: 'MsgPart not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 
@@ -111,16 +97,15 @@ app.put(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    const [msgPart] = await db.update(schema.msgParts).set({
-      ...data,
-      endTime: data.endTime ? new Date(data.endTime) : undefined,
-    }).where(eq(schema.msgParts.id, parseInt(id))).returning();
-    if (!msgPart) return c.json({ error: 'MsgPart not found' }, 404);
-    return c.json({
-      ...msgPart,
-      endTime: msgPart.endTime?.toISOString() ?? null,
-      createdAt: msgPart.createdAt.toISOString(),
-    });
+    try {
+      const msgPart = await msgPartServiceInstance.update(parseInt(id), data);
+      return c.json(msgPart);
+    } catch (error) {
+      if (error._tag === 'MsgPartNotFoundError') {
+        return c.json({ error: 'MsgPart not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 
@@ -130,8 +115,15 @@ app.delete(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    await db.delete(schema.msgParts).where(eq(schema.msgParts.id, parseInt(id)));
-    return c.json({ success: true });
+    try {
+      await msgPartServiceInstance.delete(parseInt(id));
+      return c.json({ success: true });
+    } catch (error) {
+      if (error._tag === 'MsgPartNotFoundError') {
+        return c.json({ error: 'MsgPart not found' }, 404);
+      }
+      throw error;
+    }
   }
 );
 

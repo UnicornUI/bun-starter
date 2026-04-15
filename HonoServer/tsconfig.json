@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2024",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -11,8 +11,10 @@
     "rootDir": "./src",
     "declaration": true,
     "jsx": "react-jsx",
-    "types": ["bun-types"]
+    "types": ["bun-types"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*"],
+  "extends": "@tsconfig/bun/tsconfig.json",
   "exclude": ["node_modules", "dist"]
 }
