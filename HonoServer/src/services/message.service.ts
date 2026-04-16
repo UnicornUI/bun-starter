@@ -41,14 +41,13 @@ export interface MessageQuery {
   parentId?: string;
 }
 
-type MessageError = MessageNotFoundError | ValidationError;
 
 export interface IMessageService {
   readonly findAll: (params: MessageQuery) => Effect.Effect<MessageOutput[]>;
   readonly findById: (id: number) => Effect.Effect<MessageOutput, MessageNotFoundError>;
   readonly findReplies: (parentId: number) => Effect.Effect<MessageOutput[]>;
   readonly create: (data: CreateMessageInput) => Effect.Effect<MessageOutput, ValidationError>;
-  readonly update: (id: number, data: UpdateMessageInput) => Effect.Effect<MessageOutput, MessageError>;
+  readonly update: (id: number, data: UpdateMessageInput) => Effect.Effect<MessageOutput, MessageNotFoundError | ValidationError>;
   readonly delete: (id: number) => Effect.Effect<void, MessageNotFoundError>;
 }
 

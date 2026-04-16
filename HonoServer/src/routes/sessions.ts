@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Runtime } from "../effects"
 import { Effect } from "effect"
 import { SessionService } from '../services/session.service';
-import { toResponse, createdResponse, deletedResponse } from '../utils/response';
+import { createdResponse } from '../utils/response';
 
 const app = new Hono();
 
@@ -52,7 +52,7 @@ app.get(
       const service = yield* SessionService
       return yield* service.findAll({ agentId, parentId })
     }))
-    return c.json(toResponse(sessions));
+    return c.json(createdResponse(sessions));
   }
 );
 
@@ -85,7 +85,7 @@ app.get(
   async (c) => {
     const { id } = c.req.valid('param');
     const session = await Runtime.runPromise(SessionService.use((svc) => svc.findById(parseInt(id))));
-    return c.json(toResponse(session));
+    return c.json(createdResponse(session));
   }
 );
 
@@ -104,7 +104,7 @@ app.put(
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
     const session = await Runtime.runPromise(SessionService.use(svc => svc.update(parseInt(id), data)));
-    return c.json(toResponse(session));
+    return c.json(createdResponse(session));
   }
 );
 
@@ -115,7 +115,7 @@ app.delete(
   async (c) => {
     const { id } = c.req.valid('param');
     await Runtime.runPromise(SessionService.use(svc => svc.delete(parseInt(id))));
-    return c.json(deletedResponse());
+    return c.json(createdResponse({ success: true}));
   }
 );
 
@@ -129,7 +129,7 @@ app.get(
   async (c) => {
     const { id } = c.req.valid('param');
     const sessions = await Runtime.runPromise(SessionService.use(svc => svc.findChildren(parseInt(id))));
-    return c.json(toResponse(sessions));
+    return c.json(createdResponse(sessions));
   }
 );
 

@@ -1,16 +1,25 @@
-import type { Context } from "hono";
+import type { Context, ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { isAppError } from "./types";
+import { AppError } from "./types";
 import { errorResponse } from "../utils/response";
-import { getStatus, extractEffectError } from "./format";
 
-export const errorMiddleware = async (err: Error, c: Context) => {
-  // 1. HTTPException 直接透传
+export const errorMiddleware: ErrorHandler = async (err: Error, c: Context) => {
+
+  console.error("error: ", { error: err });
+
+  // 1. 直接是 AppError 实例
+  if (err instanceof AppError) {
+    const status = getStatus(err) as 400 | 404 | 500;
+    const response = errorResponse(err);
+    return c.json(response, status);
+  }
+
+  // 2. HTTPException 直接透传
   if (err instanceof HTTPException) {
     return err.getResponse();
   }
 
-  // 2. Zod 验证错误 (hono-openapi/zod-validator)
+  // 3. Zod 验证错误 (hono-openapi/zod-validator)
   const zodErrors = extractZodErrors(err);
   if (zodErrors.length > 0) {
     return c.json(
@@ -28,7 +37,7 @@ export const errorMiddleware = async (err: Error, c: Context) => {
     );
   }
 
-  // 3. Effect 错误 (从 err.cause 提取)
+  // 4. Effect 错误 (从 err.cause 提取)
   const effectError = extractEffectError(err);
   if (effectError) {
     const status = getStatus(effectError) as 400 | 404 | 500;
@@ -41,12 +50,6 @@ export const errorMiddleware = async (err: Error, c: Context) => {
     return c.json(response, status);
   }
 
-  // 4. 直接是 AppError 实例
-  if (isAppError(err)) {
-    const status = getStatus(err) as 400 | 404 | 500;
-    const response = errorResponse(err);
-    return c.json(response, status);
-  }
 
   // 5. 未知错误
   console.error("[Error]", {
@@ -97,3 +100,34 @@ function extractZodErrors(err: Error): Array<{ path: string; message: string }> 
 
   return [];
 }
+
+
+export function extractEffectError(err: unknown): AppError | undefined {
+  const cause = (err as any)?.cause;
+  if (!cause) return undefined;
+
+  if (cause._tag === "Failure") {
+    return cause.error as AppError;
+  }
+
+  return undefined;
+}
+
+const StatusMap: Record<string, number> = {
+  SessionNotFoundError: 404,
+  SessionValidationError: 400,
+  MessageNotFoundError: 404,
+  MsgPartNotFoundError: 404,
+  ValidationError: 400,
+};
+
+export function getStatus(error: AppError | unknown): number {
+  if (error instanceof AppError) {
+    return StatusMap[error.name] ?? 500;
+  }
+  if (error && typeof error === "object" && "name" in error) {
+    return StatusMap[(error as any).name] ?? 500;
+  }
+  return 500;
+}
+

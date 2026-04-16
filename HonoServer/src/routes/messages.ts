@@ -3,6 +3,7 @@ import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
 import { Runtime } from "../effects"
 import { MessageService } from '../services/message.service';
+import { createdResponse } from '../errors';
 
 const app = new Hono();
 
@@ -44,7 +45,7 @@ app.get(
   async (c) => {
     const { subSessionId, parentId } = c.req.valid('query');
     const messages = await Runtime.runPromise(MessageService.use(svc => svc.findAll({ subSessionId, parentId })));
-    return c.json(messages);
+    return c.json(createdResponse(messages));
   }
 );
 
@@ -58,7 +59,7 @@ app.post(
   async (c) => {
     const data = c.req.valid('json');
     const message = await Runtime.runPromise(MessageService.use(svc => svc.create(data)));
-    return c.json(message, 201);
+    return c.json(createdResponse(message), 201);
   }
 );
 
@@ -75,7 +76,7 @@ app.get(
   async (c) => {
     const { id } = c.req.valid('param');
     const message = await Runtime.runPromise(MessageService.use(svc => svc.findById(parseInt(id))));
-    return c.json(message);
+    return c.json(createdResponse(message));
   }
 );
 
@@ -94,7 +95,7 @@ app.put(
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
     const message = await Runtime.runPromise(MessageService.use(svc => svc.update(parseInt(id), data)));
-    return c.json(message);
+    return c.json(createdResponse(message));
   }
 );
 
@@ -105,7 +106,7 @@ app.delete(
   async (c) => {
     const { id } = c.req.valid('param');
     await Runtime.runPromise(MessageService.use(svc => svc.delete(parseInt(id))));
-    return c.json({ success: true });
+    return c.json(createdResponse({ success: true }));
   }
 );
 
@@ -119,7 +120,7 @@ app.get(
   async (c) => {
     const { id } = c.req.valid('param');
     const messages = await Runtime.runPromise(MessageService.use(svc => svc.findReplies(parseInt(id))));
-    return c.json(messages);
+    return c.json(createdResponse(messages));
   }
 );
 
@@ -139,7 +140,7 @@ app.post(
       parentId: parseInt(id)
     };
     const message = await Runtime.runPromise(MessageService.use(svc => svc.create(messageData)));
-    return c.json(message, 201);
+    return c.json(createdResponse(message), 201);
   }
 );
 

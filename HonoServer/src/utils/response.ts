@@ -1,6 +1,6 @@
-import type { AppErrorType } from "../errors/types";
+import type { AppError } from "../errors/types";
 
-export function successResponse<T>(data: T) {
+function successResponse<T>(data: T) {
   return {
     data,
     success: true as const,
@@ -8,7 +8,7 @@ export function successResponse<T>(data: T) {
   };
 }
 
-export function errorResponse(error: AppErrorType) {
+export function errorResponse(error: AppError) {
   return {
     error: error.toResponse(),
     success: false as const,
@@ -16,26 +16,7 @@ export function errorResponse(error: AppErrorType) {
   };
 }
 
-export function toResponse<T>(data: T) {
-  return successResponse(data);
-}
-
 export function createdResponse<T>(data: T) {
   return successResponse(data);
 }
 
-export function deletedResponse() {
-  return successResponse({ success: true });
-}
-
-export interface ApiResponse<T> {
-  data?: T;
-  error?: {
-    code: string;
-    _tag: string;
-    message: string;
-    [key: string]: unknown;
-  };
-  success: boolean;
-  timestamp: string;
-}

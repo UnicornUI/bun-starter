@@ -1,118 +1,92 @@
-// 错误基类接口
-export interface AppError {
-  readonly name: string;
-  readonly data: ErrorData;
-  readonly code: string;
-  readonly _tag: string;
-  toResponse(): ErrorResponseData;
-}
+import { z } from "zod";
 
-export interface ErrorData {
-  id?: number;
-  message?: string;
-  field?: string;
-  [key: string]: unknown;
-}
+// 错误类定义与创建接口
+export abstract class AppError extends Error {
 
-export interface ErrorResponseData {
-  code: string;
-  _tag: string;
-  id?: number;
-  message: string;
-  field?: string;
-  [key: string]: unknown;
-}
+  abstract scheme(): z.core.$ZodType; 
+  abstract toResponse(): { name: string, data: any };
 
-// 基础错误类
-abstract class BaseError extends Error implements AppError {
-  abstract readonly data: ErrorData;
+  static create<Name extends string, Data extends z.core.$ZodType>(name: Name, data: Data){
+    const scheme = z.object({
+      name: z.literal(name),
+      data
+    }).meta({ ref: name });
+  
+    const result = class extends AppError {
+      public static readonly Scheme = scheme;
+      public override readonly name: Name = name as Name
+      
+      constructor(public readonly data: z.input<Data>, errorOpt?: ErrorOptions) {
+        super(name, errorOpt)
+        this.name = name
+      }
 
-  constructor(public readonly _tag: string) {
-    super();
-    this.name = _tag;
+      static isInstance(input: any): input is InstanceType<typeof result> {
+        return typeof input === "object" && "name" in input && input.name === name
+      }
+      
+      override scheme() {
+        return scheme;
+      }
+
+      override toResponse(): { name: string; data: any; } {
+         return {
+           name,
+           data: this.data
+         }
+      }
+    }
+    Object.defineProperty(result, "name", { value:  name })
+    return result;
   }
-
-  abstract get code(): string;
-
-  toResponse(): ErrorResponseData {
-    return {
-      code: this.code,
-      _tag: this._tag,
-      ...this.data,
-      message: this.data.message || this.getDefaultMessage(),
-    };
-  }
-
-  protected abstract getDefaultMessage(): string;
 }
 
 // 具体错误类定义
-export class SessionNotFoundError extends BaseError {
-  constructor(public readonly data: { id: number; message?: string } = { id: 0 }) {
-    super("SessionNotFoundError");
-  }
-  get code() { return "SESSION_NOT_FOUND"; }
-  protected getDefaultMessage() { return `Session not found: id=${this.data.id}`; }
-}
+export const SessionNotFoundError = AppError.create(
+  "SessionNotFoundError",
+  z.object({
+    id: z.number(),
+    message: z.string().optional()
+  })
+);
+export type SessionNotFoundError = z.infer<typeof SessionNotFoundError>
 
-export class SessionValidationError extends BaseError {
-  constructor(public readonly data: { field?: string; message: string }) {
-    super("SessionValidationError");
-  }
-  get code() { return "SESSION_VALIDATION"; }
-  protected getDefaultMessage() { return `Validation failed: ${this.data.message}`; }
-}
+export const SessionValidationError = AppError.create(
+  "SessionValidationError",
+  z.object({
+    message: z.string(),
+    field: z.string().optional(),
+  })
+);
 
-export class MessageNotFoundError extends BaseError {
-  constructor(public readonly data: { id: number; message?: string } = { id: 0 }) {
-    super("MessageNotFoundError");
-  }
-  get code() { return "MESSAGE_NOT_FOUND"; }
-  protected getDefaultMessage() { return `Message not found: id=${this.data.id}`; }
-}
+export type SessionValidationError = z.infer<typeof SessionValidationError>
 
-export class MsgPartNotFoundError extends BaseError {
-  constructor(public readonly data: { id: number; message?: string } = { id: 0 }) {
-    super("MsgPartNotFoundError");
-  }
-  get code() { return "MSGPART_NOT_FOUND"; }
-  protected getDefaultMessage() { return `MsgPart not found: id=${this.data.id}`; }
-}
+export const MessageNotFoundError = AppError.create(
+  "MessageNotFoundError",
+  z.object({
+    id: z.number(),
+    message: z.string().optional()
+  })
+); 
 
-export class ValidationError extends BaseError {
-  constructor(public readonly data: { field?: string; message: string }) {
-    super("ValidationError");
-  }
-  get code() { return "VALIDATION"; }
-  protected getDefaultMessage() { return `Validation failed: ${this.data.message}`; }
-}
+export type MessageNotFoundError = z.infer<typeof MessageNotFoundError>
 
-// 错误联合类型
-export type AppErrorType =
-  | SessionNotFoundError
-  | SessionValidationError
-  | MessageNotFoundError
-  | MsgPartNotFoundError
-  | ValidationError;
+export const MsgPartNotFoundError = AppError.create(
+  "MsgPartNotFoundError",
+  z.object({
+    id: z.number(),
+    message: z.string().optional()
+  })
+) 
 
-// 类型守卫
-export function isAppError(input: unknown): input is AppErrorType {
-  if (!input || typeof input !== "object") return false;
-  const tags = [
-    "SessionNotFoundError",
-    "SessionValidationError",
-    "MessageNotFoundError",
-    "MsgPartNotFoundError",
-    "ValidationError",
-  ];
-  return "_tag" in (input as any) && tags.includes((input as any)._tag);
-}
+export type MsgPartNotFoundError = z.infer<typeof MsgPartNotFoundError>
 
-// 工厂函数
-export const Errors = {
-  sessionNotFound: (id: number, message?: string) => new SessionNotFoundError({ id, message }),
-  sessionValidation: (field: string, message: string) => new SessionValidationError({ field, message }),
-  messageNotFound: (id: number, message?: string) => new MessageNotFoundError({ id, message }),
-  msgPartNotFound: (id: number, message?: string) => new MsgPartNotFoundError({ id, message }),
-  validation: (field: string, message: string) => new ValidationError({ field, message }),
-} as const;
+export const ValidationError = AppError.create(
+  "ValidationError",
+  z.object({
+    message: z.string(),
+    field: z.string().optional()
+  })
+) 
+
+export type ValidationError = z.infer<typeof ValidationError>
