@@ -1,22 +1,13 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db";
 import { Effect, Context, Layer } from "effect";
+import { MsgPartNotFoundError, ValidationError } from "../errors";
 
 // ============================================
 // 1. Types
 // ============================================
 
 export type MsgPartRow = typeof schema.msgParts.$inferSelect;
-
-export interface MsgPartNotFoundError {
-  readonly _tag: "MsgPartNotFoundError";
-  readonly id: number;
-}
-
-export interface ValidationError {
-  readonly _tag: "ValidationError";
-  readonly message: string;
-}
 
 // ============================================
 // 2. MsgPart Service Interface
@@ -46,11 +37,13 @@ export interface UpdateMsgPartInput {
   endTime?: string;
 }
 
+type MsgPartError = MsgPartNotFoundError | ValidationError;
+
 export interface IMsgPartService {
   readonly findByMessageId: (messageId: number) => Effect.Effect<MsgPartOutput[], MsgPartNotFoundError>;
   readonly findById: (id: number) => Effect.Effect<MsgPartOutput, MsgPartNotFoundError>;
   readonly create: (messageId: number, data: CreateMsgPartInput) => Effect.Effect<MsgPartOutput, ValidationError>;
-  readonly update: (id: number, data: UpdateMsgPartInput) => Effect.Effect<MsgPartOutput, MsgPartNotFoundError | ValidationError>;
+  readonly update: (id: number, data: UpdateMsgPartInput) => Effect.Effect<MsgPartOutput, MsgPartError>;
   readonly delete: (id: number) => Effect.Effect<void, MsgPartNotFoundError>;
 }
 
@@ -95,7 +88,7 @@ export const MsgPartServiceLive = Layer.effect(
         );
       
         if (!rows) {
-          return yield* Effect.fail({ _tag: "MsgPartNotFoundError", id } as MsgPartNotFoundError);
+          return yield* Effect.fail(new MsgPartNotFoundError({ id }));
         }
       
         return serializeMsgPart(rows!);
@@ -104,7 +97,10 @@ export const MsgPartServiceLive = Layer.effect(
     const create = (messageId: number, data: CreateMsgPartInput) => 
       Effect.gen(function*(){
         if (!data.type || data.type.trim().length === 0) {
-          return yield* Effect.fail({ _tag: "ValidationError", message: "Type is required" } as ValidationError);
+          return yield* Effect.fail(new ValidationError({ 
+            field: "type", 
+            message: "Type is required" 
+          }));
         }
 
         const [rows] = yield* Effect.promise(() => 

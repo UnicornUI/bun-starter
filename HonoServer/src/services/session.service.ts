@@ -1,19 +1,14 @@
 import { eq, and } from "drizzle-orm";
 import { db, schema } from "../db";
-import { Context, Layer, Effect, Console } from "effect";
+import { Context, Layer, Effect } from "effect";
+import {
+  SessionNotFoundError,
+  ValidationError,
+  SessionValidationError,
+} from "../errors";
 
 // Types
 type SessionRow = typeof schema.sessions.$inferSelect;
-
-export interface SessionNotFoundError {
-  readonly _tag: "SessionNotFoundError";
-  readonly id: number;
-}
-
-export interface ValidationError {
-  readonly _tag: "ValidationError";
-  readonly message: string;
-}
 
 // ============================================
 // Session Service Interface
@@ -41,12 +36,14 @@ export interface UpdateSessionInput {
   data?: string;
 }
 
+type SessionError = SessionNotFoundError | SessionValidationError | ValidationError;
+
 export interface ISessionService {
   readonly findAll: (params: { agentId?: string; parentId?: string }) => Effect.Effect<SessionOutput[]>;
   readonly findById: (id: number) => Effect.Effect<SessionOutput, SessionNotFoundError>;
   readonly findChildren: (parentId: number) => Effect.Effect<SessionOutput[]>;
-  readonly create: (data: CreateSessionInput) => Effect.Effect<SessionOutput, ValidationError>;
-  readonly update: (id: number, data: UpdateSessionInput) => Effect.Effect<SessionOutput, SessionNotFoundError | ValidationError>;
+  readonly create: (data: CreateSessionInput) => Effect.Effect<SessionOutput, SessionValidationError | ValidationError>;
+  readonly update: (id: number, data: UpdateSessionInput) => Effect.Effect<SessionOutput, SessionError>;
   readonly delete: (id: number) => Effect.Effect<void, SessionNotFoundError>;
 }
 
@@ -108,7 +105,7 @@ export const SessionServiceLive = Layer.effect(
           db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).limit(1)
         );
         if (!rows) {
-          return yield* Effect.fail({ _tag: "SessionNotFoundError", id } as SessionNotFoundError);
+          return yield* Effect.fail(new SessionNotFoundError({ id }));
         }
         
         return serializeSession(rows!);
@@ -125,10 +122,16 @@ export const SessionServiceLive = Layer.effect(
     const create = (data: CreateSessionInput) => 
       Effect.gen(function*() {
         if (!data.title?.trim()) {
-          return yield* Effect.fail({ _tag: "ValidationError", message: "Title is required" } as ValidationError);
+          return yield* Effect.fail(new SessionValidationError({ 
+            field: "title", 
+            message: "Title is required" 
+          }));
         }
         if (!data.agentId) {
-          return yield* Effect.fail({ _tag: "ValidationError", message: "AgentId is required" } as ValidationError);
+          return yield* Effect.fail(new SessionValidationError({ 
+            field: "agentId", 
+            message: "AgentId is required" 
+          }));
         }
 
         const [rows] = yield* Effect.promise(() => 

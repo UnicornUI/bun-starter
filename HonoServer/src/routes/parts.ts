@@ -2,8 +2,8 @@ import { Hono } from 'hono';
 import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
 import { Runtime } from "../effects"
-import { Effect } from "effect"
 import { MsgPartService } from '../services/msg-part.service';
+import { toResponse, createdResponse, deletedResponse } from '../utils/response';
 
 const app = new Hono();
 
@@ -41,7 +41,7 @@ app.get(
   async (c) => {
     const { messageId } = c.req.valid('param');
     const msgParts = await Runtime.runPromise(MsgPartService.use(svc => svc.findByMessageId(parseInt(messageId))));
-    return c.json(msgParts);
+    return c.json(toResponse(msgParts));
   }
 );
 
@@ -57,7 +57,7 @@ app.post(
     const { messageId } = c.req.valid('param');
     const data = c.req.valid('json');
     const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.create(parseInt(messageId), data))); 
-    return c.json(msgPart, 201);
+    return c.json(createdResponse(msgPart), 201);
   }
 );
 
@@ -74,7 +74,7 @@ app.get(
   async (c) => {
     const { id } = c.req.valid('param');
     const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.findById(parseInt(id))));
-    return c.json(msgPart);
+    return c.json(toResponse(msgPart));
   }
 );
 
@@ -93,7 +93,7 @@ app.put(
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
     const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.update(parseInt(id), data)));
-    return c.json(msgPart);
+    return c.json(toResponse(msgPart));
   }
 );
 
@@ -104,7 +104,7 @@ app.delete(
   async (c) => {
     const { id } = c.req.valid('param');
     await Runtime.runPromise(MsgPartService.use(svc => svc.delete(parseInt(id))));
-    return c.json({ success: true });
+    return c.json(deletedResponse());
   }
 );
 

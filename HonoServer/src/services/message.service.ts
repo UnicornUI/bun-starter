@@ -1,22 +1,13 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db";
 import { Context, Effect, Layer } from "effect";
+import { MessageNotFoundError, ValidationError } from "../errors";
 
 // ============================================
 // 1. Types
 // ============================================
 
 export type MessageRow = typeof schema.messages.$inferSelect;
-
-export interface MessageNotFoundError {
-  readonly _tag: "MessageNotFoundError";
-  readonly id: number;
-}
-
-export interface ValidationError {
-  readonly _tag: "ValidationError";
-  readonly message: string;
-}
 
 // ============================================
 // 2. Message Service Interface
@@ -50,12 +41,14 @@ export interface MessageQuery {
   parentId?: string;
 }
 
+type MessageError = MessageNotFoundError | ValidationError;
+
 export interface IMessageService {
   readonly findAll: (params: MessageQuery) => Effect.Effect<MessageOutput[]>;
   readonly findById: (id: number) => Effect.Effect<MessageOutput, MessageNotFoundError>;
   readonly findReplies: (parentId: number) => Effect.Effect<MessageOutput[]>;
   readonly create: (data: CreateMessageInput) => Effect.Effect<MessageOutput, ValidationError>;
-  readonly update: (id: number, data: UpdateMessageInput) => Effect.Effect<MessageOutput, MessageNotFoundError | ValidationError>;
+  readonly update: (id: number, data: UpdateMessageInput) => Effect.Effect<MessageOutput, MessageError>;
   readonly delete: (id: number) => Effect.Effect<void, MessageNotFoundError>;
 }
 
@@ -110,7 +103,7 @@ export const MessageServiceLive = Layer.effect(
           db.select().from(schema.messages).where(eq(schema.messages.id, id)).limit(1)
         );
         if (!rows) {
-          return yield* Effect.fail({ _tag: "MessageNotFoundError", id } as MessageNotFoundError);
+          return yield* Effect.fail(new MessageNotFoundError({ id }));
         }
         return serializeMessage(rows!);
       });
@@ -127,7 +120,10 @@ export const MessageServiceLive = Layer.effect(
       Effect.gen(function* () {
 
         if (!data.content || data.content.trim().length === 0) {
-          return yield* Effect.fail({ _tag: "ValidationError", message: "Content is required" } as ValidationError);
+          return yield* Effect.fail(new ValidationError({ 
+            field: "content", 
+            message: "Content is required" 
+          }));
         }
 
         const [message] = yield* Effect.promise(() =>  
