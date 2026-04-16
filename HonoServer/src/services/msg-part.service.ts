@@ -1,18 +1,19 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db";
+import { Effect, Context, Layer } from "effect";
 
 // ============================================
 // 1. Types
 // ============================================
 
-type MsgPartRow = typeof schema.msgParts.$inferSelect;
+export type MsgPartRow = typeof schema.msgParts.$inferSelect;
 
-interface MsgPartNotFoundError {
+export interface MsgPartNotFoundError {
   readonly _tag: "MsgPartNotFoundError";
   readonly id: number;
 }
 
-interface ValidationError {
+export interface ValidationError {
   readonly _tag: "ValidationError";
   readonly message: string;
 }
@@ -21,7 +22,7 @@ interface ValidationError {
 // 2. MsgPart Service Interface
 // ============================================
 
-interface MsgPartOutput {
+export interface MsgPartOutput {
   id: number;
   messageId: number;
   type: string;
@@ -31,26 +32,26 @@ interface MsgPartOutput {
   createdAt: string;
 }
 
-interface CreateMsgPartInput {
+export interface CreateMsgPartInput {
   type: string;
   content?: string;
   metadata?: string;
   endTime?: string;
 }
 
-interface UpdateMsgPartInput {
+export interface UpdateMsgPartInput {
   type?: string;
   content?: string;
   metadata?: string;
   endTime?: string;
 }
 
-interface IMsgPartService {
-  readonly findByMessageId: (messageId: number) => Promise<MsgPartOutput[]>;
-  readonly findById: (id: number) => Promise<MsgPartOutput>;
-  readonly create: (messageId: number, data: CreateMsgPartInput) => Promise<MsgPartOutput>;
-  readonly update: (id: number, data: UpdateMsgPartInput) => Promise<MsgPartOutput>;
-  readonly delete: (id: number) => Promise<void>;
+export interface IMsgPartService {
+  readonly findByMessageId: (messageId: number) => Effect.Effect<MsgPartOutput[], MsgPartNotFoundError>;
+  readonly findById: (id: number) => Effect.Effect<MsgPartOutput, MsgPartNotFoundError>;
+  readonly create: (messageId: number, data: CreateMsgPartInput) => Effect.Effect<MsgPartOutput, ValidationError>;
+  readonly update: (id: number, data: UpdateMsgPartInput) => Effect.Effect<MsgPartOutput, MsgPartNotFoundError | ValidationError>;
+  readonly delete: (id: number) => Effect.Effect<void, MsgPartNotFoundError>;
 }
 
 // ============================================
@@ -74,84 +75,78 @@ const serializeMsgParts = (rows: MsgPartRow[]): MsgPartOutput[] =>
 // 4. MsgPart Service Implementation
 // ============================================
 
-const createMsgPartService = (): IMsgPartService => {
-  const findByMessageId = async (messageId: number): Promise<MsgPartOutput[]> => {
-    const rows = await db.select().from(schema.msgParts).where(eq(schema.msgParts.messageId, messageId));
-    return serializeMsgParts(rows);
-  };
+export class MsgPartService extends Context.Service<MsgPartService, IMsgPartService>() ("MsgPartService") {}
 
-  const findById = async (id: number): Promise<MsgPartOutput> => {
-    const rows = await db.select().from(schema.msgParts).where(eq(schema.msgParts.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "MsgPartNotFoundError", id } as MsgPartNotFoundError;
-    }
-    
-    return serializeMsgPart(rows[0]);
-  };
+export const MsgPartServiceLive = Layer.effect(
+  MsgPartService,
+  Effect.gen(function* (){
+    const findByMessageId = (messageId: number) => 
+      Effect.gen(function* (){
+        const rows = yield* Effect.promise(() =>
+          db.select().from(schema.msgParts).where(eq(schema.msgParts.messageId, messageId))
+        );
+        return serializeMsgParts(rows);
+      });
 
-  const create = async (messageId: number, data: CreateMsgPartInput): Promise<MsgPartOutput> => {
-    if (!data.type || data.type.trim().length === 0) {
-      throw { _tag: "ValidationError", message: "Type is required" } as ValidationError;
-    }
+    const findById = (id: number) => 
+      Effect.gen(function* () {
+        const rows = yield* Effect.promise(() => 
+          db.select().from(schema.msgParts).where(eq(schema.msgParts.id, id)).limit(1)
+        );
+      
+        if (rows.length === 0) {
+          return yield* Effect.fail({ _tag: "MsgPartNotFoundError", id } as MsgPartNotFoundError);
+        }
+      
+        return serializeMsgPart(rows[0]!);
+      });
 
-    const rows = await db.insert(schema.msgParts).values({
-      messageId,
-      type: data.type,
-      content: data.content ?? null,
-      metadata: data.metadata ?? null,
-      endTime: data.endTime ? new Date(data.endTime) : null,
-      createdAt: new Date(),
-    }).returning();
+    const create = (messageId: number, data: CreateMsgPartInput) => 
+      Effect.gen(function*(){
+        if (!data.type || data.type.trim().length === 0) {
+          return yield* Effect.fail({ _tag: "ValidationError", message: "Type is required" } as ValidationError);
+        }
 
-    return serializeMsgPart(rows[0]);
-  };
+        const [rows] = yield* Effect.promise(() => 
+          db.insert(schema.msgParts).values({
+            messageId,
+            type: data.type,
+            content: data.content ?? null,
+            metadata: data.metadata ?? null,
+            endTime: data.endTime ? new Date(data.endTime) : null,
+            createdAt: new Date(),
+          }).returning()
+        );
+        return serializeMsgPart(rows!);
+      });
 
-  const update = async (id: number, data: UpdateMsgPartInput): Promise<MsgPartOutput> => {
-    const rows = await db.select().from(schema.msgParts).where(eq(schema.msgParts.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "MsgPartNotFoundError", id } as MsgPartNotFoundError;
-    }
-    
-    const updated = await db.update(schema.msgParts)
-      .set({
-        ...data,
-        endTime: data.endTime ? new Date(data.endTime) : undefined,
-      })
-      .where(eq(schema.msgParts.id, id))
-      .returning();
-    
-    return serializeMsgPart(updated[0]);
-  };
+    const update = (id: number, data: UpdateMsgPartInput) => 
+      Effect.gen(function *() {
+        yield* findById(id)
+        const [updated] = yield* Effect.promise(() => 
+          db.update(schema.msgParts)
+            .set({
+              ...data,
+              endTime: data.endTime ? new Date(data.endTime) : undefined,
+            })
+            .where(eq(schema.msgParts.id, id))
+            .returning());
+        
+        return serializeMsgPart(updated!);
+      });
 
-  const remove = async (id: number): Promise<void> => {
-    const rows = await db.select().from(schema.msgParts).where(eq(schema.msgParts.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "MsgPartNotFoundError", id } as MsgPartNotFoundError;
-    }
-    
-    await db.delete(schema.msgParts).where(eq(schema.msgParts.id, id)).run();
-  };
+    const remove = (id: number) => 
+      Effect.gen(function* () {
+        yield* findById(id);
+        yield* Effect.promise(() => db.delete(schema.msgParts).where(eq(schema.msgParts.id, id)));
+      });
 
-  return { findByMessageId, findById, create, update, delete: remove } as IMsgPartService;
-};
+  return MsgPartService.of({
+    findByMessageId,
+    findById,
+    create,
+    update,
+    delete:remove
+  });
+}));
 
-// Create and export the msg part service instance
-const msgPartServiceInstance = createMsgPartService();
-
-// ============================================
-// 5. Exports
-// ============================================
-
-export {
-  msgPartServiceInstance,
-  createMsgPartService,
-  type IMsgPartService,
-  type MsgPartOutput,
-  type CreateMsgPartInput,
-  type UpdateMsgPartInput,
-  type MsgPartNotFoundError,
-  type ValidationError,
-};

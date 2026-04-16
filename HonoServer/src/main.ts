@@ -47,7 +47,7 @@ const SessionServiceLive = Layer.effect(
         if (result.length === 0) {
           return yield* Effect.fail({ _tag: "SessionNotFoundError", id } as SessionNotFoundError);
         }
-        return result[0];
+        return result[0]!;
       });
 
     const create = (data: NewSession) =>
@@ -65,7 +65,7 @@ const SessionServiceLive = Layer.effect(
             updatedAt: new Date(),
           }).returning()
         );
-        return session;
+        return session!;
       });
 
     const update = (id: number, data: UpdateSession) =>
@@ -77,7 +77,7 @@ const SessionServiceLive = Layer.effect(
             .where(eq(schema.sessions.id, id))
             .returning()
         );
-        return updated;
+        return updated!;
       });
 
     const remove = (id: number) =>
@@ -93,23 +93,25 @@ const SessionServiceLive = Layer.effect(
         db.select().from(schema.sessions).where(eq(schema.sessions.parentId, parentId))
       );
 
-    return {
+    return SessionService.of({
       findAll,
       findById,
       create,
       update,
       remove,
       findChildren,
-    } as ISessionService;
+    })
   })
 );
 
 const ConfigServiceLive = Layer.effect(
   ConfigService,
-  Effect.succeed({
-    defaultAgentId: "default-agent",
-    maxTitleLength: 200,
-  } as IConfigService)
+  Effect.gen(function* () {
+    return ConfigService.of({
+      defaultAgentId: "default-agent",
+      maxTitleLength: 200,
+    })
+  })
 );
 
 const AllLayers = Layer.provideMerge(SessionServiceLive, ConfigServiceLive);

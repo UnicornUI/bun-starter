@@ -1,18 +1,19 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db";
+import { Context, Effect, Layer } from "effect";
 
 // ============================================
 // 1. Types
 // ============================================
 
-type MessageRow = typeof schema.messages.$inferSelect;
+export type MessageRow = typeof schema.messages.$inferSelect;
 
-interface MessageNotFoundError {
+export interface MessageNotFoundError {
   readonly _tag: "MessageNotFoundError";
   readonly id: number;
 }
 
-interface ValidationError {
+export interface ValidationError {
   readonly _tag: "ValidationError";
   readonly message: string;
 }
@@ -21,7 +22,7 @@ interface ValidationError {
 // 2. Message Service Interface
 // ============================================
 
-interface MessageOutput {
+export interface MessageOutput {
   id: number;
   parentId: number | null;
   subSessionId: number;
@@ -31,7 +32,7 @@ interface MessageOutput {
   createdAt: string;
 }
 
-interface CreateMessageInput {
+export interface CreateMessageInput {
   subSessionId: number;
   role: "user" | "assistant" | "system";
   content: string;
@@ -39,23 +40,23 @@ interface CreateMessageInput {
   parentId?: number;
 }
 
-interface UpdateMessageInput {
+export interface UpdateMessageInput {
   content?: string;
   data?: string;
 }
 
-interface MessageQuery {
+export interface MessageQuery {
   subSessionId?: string;
   parentId?: string;
 }
 
-interface IMessageService {
-  readonly findAll: (params: MessageQuery) => Promise<MessageOutput[]>;
-  readonly findById: (id: number) => Promise<MessageOutput>;
-  readonly findReplies: (parentId: number) => Promise<MessageOutput[]>;
-  readonly create: (data: CreateMessageInput) => Promise<MessageOutput>;
-  readonly update: (id: number, data: UpdateMessageInput) => Promise<MessageOutput>;
-  readonly delete: (id: number) => Promise<void>;
+export interface IMessageService {
+  readonly findAll: (params: MessageQuery) => Effect.Effect<MessageOutput[]>;
+  readonly findById: (id: number) => Effect.Effect<MessageOutput, MessageNotFoundError>;
+  readonly findReplies: (parentId: number) => Effect.Effect<MessageOutput[]>;
+  readonly create: (data: CreateMessageInput) => Effect.Effect<MessageOutput, ValidationError>;
+  readonly update: (id: number, data: UpdateMessageInput) => Effect.Effect<MessageOutput, MessageNotFoundError | ValidationError>;
+  readonly delete: (id: number) => Effect.Effect<void, MessageNotFoundError>;
 }
 
 // ============================================
@@ -78,97 +79,93 @@ const serializeMessages = (rows: MessageRow[]): MessageOutput[] =>
 // ============================================
 // 4. Message Service Implementation
 // ============================================
+export class MessageService extends Context.Service<MessageService, IMessageService>()("MessageService"){}
 
-const createMessageService = (): IMessageService => {
-  const findAll = async ({ subSessionId, parentId }: MessageQuery): Promise<MessageOutput[]> => {
-    let rows: MessageRow[];
-    
-    if (subSessionId) {
-      rows = await db.select().from(schema.messages).where(eq(schema.messages.subSessionId, parseInt(subSessionId)));
-    } else if (parentId) {
-      rows = await db.select().from(schema.messages).where(eq(schema.messages.parentId, parseInt(parentId)));
-    } else {
-      rows = await db.select().from(schema.messages).all();
-    }
-    
-    return serializeMessages(rows);
-  };
+export const MessageServiceLive = Layer.effect(
+  MessageService,
+  Effect.gen(function* () {
+    const findAll = ({ subSessionId, parentId }: MessageQuery) => 
+      Effect.gen(function* () {
+        let rows: MessageRow[];
+        
+        if (subSessionId) {
+          rows = yield* Effect.promise(() => 
+            db.select().from(schema.messages).where(eq(schema.messages.subSessionId, parseInt(subSessionId)))
+          );
+        } else if (parentId) {
+          rows = yield* Effect.promise(() => 
+            db.select().from(schema.messages).where(eq(schema.messages.parentId, parseInt(parentId)))
+          );
+        } else {
+          rows = yield* Effect.promise(() =>
+            db.select().from(schema.messages)
+          );
+        }
+        return serializeMessages(rows);
+      });
 
-  const findById = async (id: number): Promise<MessageOutput> => {
-    const rows = await db.select().from(schema.messages).where(eq(schema.messages.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "MessageNotFoundError", id } as MessageNotFoundError;
-    }
-    
-    return serializeMessage(rows[0]);
-  };
+    const findById = (id: number)=> 
+      Effect.gen(function* () {
+        const rows = yield* Effect.promise(() => 
+          db.select().from(schema.messages).where(eq(schema.messages.id, id)).limit(1)
+        );
+        if (rows.length === 0) {
+          return yield* Effect.fail({ _tag: "MessageNotFoundError", id } as MessageNotFoundError);
+        }
+        return serializeMessage(rows[0]!);
+      });
 
-  const findReplies = async (parentId: number): Promise<MessageOutput[]> => {
-    const rows = await db.select().from(schema.messages).where(eq(schema.messages.parentId, parentId));
-    return serializeMessages(rows);
-  };
+    const findReplies = (parentId: number) => 
+      Effect.gen(function* (){
+        const rows = yield* Effect.promise(() => 
+          db.select().from(schema.messages).where(eq(schema.messages.parentId, parentId))
+        );
+        return serializeMessages(rows);
+      });
 
-  const create = async (data: CreateMessageInput): Promise<MessageOutput> => {
-    if (!data.content || data.content.trim().length === 0) {
-      throw { _tag: "ValidationError", message: "Content is required" } as ValidationError;
-    }
+    const create = (data: CreateMessageInput) => 
+      Effect.gen(function* () {
 
-    const rows = await db.insert(schema.messages).values({
-      subSessionId: data.subSessionId,
-      role: data.role,
-      content: data.content,
-      data: data.data ?? null,
-      parentId: data.parentId ?? null,
-      createdAt: new Date(),
-    }).returning();
+        if (!data.content || data.content.trim().length === 0) {
+          return yield* Effect.fail({ _tag: "ValidationError", message: "Content is required" } as ValidationError);
+        }
 
-    return serializeMessage(rows[0]);
-  };
+        const [message] = yield* Effect.promise(() =>  
+          db.insert(schema.messages).values({
+            subSessionId: data.subSessionId,
+            role: data.role,
+            content: data.content,
+            data: data.data ?? null,
+            parentId: data.parentId ?? null,
+            createdAt: new Date(),
+          }).returning()
+        );
+        return serializeMessage(message!);
+      });
 
-  const update = async (id: number, data: UpdateMessageInput): Promise<MessageOutput> => {
-    const rows = await db.select().from(schema.messages).where(eq(schema.messages.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "MessageNotFoundError", id } as MessageNotFoundError;
-    }
-    
-    const updated = await db.update(schema.messages)
-      .set(data)
-      .where(eq(schema.messages.id, id))
-      .returning();
-    
-    return serializeMessage(updated[0]);
-  };
+    const update = (id: number, data: UpdateMessageInput) => 
+      Effect.gen(function* () {
+        yield* findById(id) 
+        const [updated] = yield* Effect.promise(() => db.update(schema.messages)
+          .set(data)
+          .where(eq(schema.messages.id, id))
+          .returning())
+        
+        return serializeMessage(updated!);
+      });
 
-  const remove = async (id: number): Promise<void> => {
-    const rows = await db.select().from(schema.messages).where(eq(schema.messages.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "MessageNotFoundError", id } as MessageNotFoundError;
-    }
-    
-    await db.delete(schema.messages).where(eq(schema.messages.id, id)).run();
-  };
+    const remove = (id: number) => 
+      Effect.gen(function* () {
+        yield* findById(id)
+        yield* Effect.promise(() => db.delete(schema.messages).where(eq(schema.messages.id, id)));
+      });
 
-  return { findAll, findById, findReplies, create, update, delete: remove } as IMessageService;
-};
-
-// Create and export the message service instance
-const messageServiceInstance = createMessageService();
-
-// ============================================
-// 5. Exports
-// ============================================
-
-export {
-  messageServiceInstance,
-  createMessageService,
-  type IMessageService,
-  type MessageOutput,
-  type CreateMessageInput,
-  type UpdateMessageInput,
-  type MessageQuery,
-  type MessageNotFoundError,
-  type ValidationError,
-};
+    return MessageService.of({ 
+      findAll, 
+      findById, 
+      findReplies, 
+      create,  
+      update, 
+      delete: remove 
+    });
+  }));

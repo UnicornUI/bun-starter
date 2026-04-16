@@ -1,15 +1,16 @@
 import { eq, and } from "drizzle-orm";
 import { db, schema } from "../db";
+import { Context, Layer, Effect } from "effect";
 
 // Types
 type SessionRow = typeof schema.sessions.$inferSelect;
 
-interface SessionNotFoundError {
+export interface SessionNotFoundError {
   readonly _tag: "SessionNotFoundError";
   readonly id: number;
 }
 
-interface ValidationError {
+export interface ValidationError {
   readonly _tag: "ValidationError";
   readonly message: string;
 }
@@ -18,7 +19,7 @@ interface ValidationError {
 // Session Service Interface
 // ============================================
 
-interface SessionOutput {
+export interface SessionOutput {
   id: number;
   parentId: number | null;
   title: string;
@@ -28,25 +29,25 @@ interface SessionOutput {
   updatedAt: string;
 }
 
-interface CreateSessionInput {
+export interface CreateSessionInput {
   title: string;
   agentId: string;
   data?: string;
   parentId?: number;
 }
 
-interface UpdateSessionInput {
+export interface UpdateSessionInput {
   title?: string;
   data?: string;
 }
 
-interface ISessionService {
-  readonly findAll: (params: { agentId?: string; parentId?: string }) => Promise<SessionOutput[]>;
-  readonly findById: (id: number) => Promise<SessionOutput>;
-  readonly findChildren: (parentId: number) => Promise<SessionOutput[]>;
-  readonly create: (data: CreateSessionInput) => Promise<SessionOutput>;
-  readonly update: (id: number, data: UpdateSessionInput) => Promise<SessionOutput>;
-  readonly delete: (id: number) => Promise<void>;
+export interface ISessionService {
+  readonly findAll: (params: { agentId?: string; parentId?: string }) => Effect.Effect<SessionOutput[]>;
+  readonly findById: (id: number) => Effect.Effect<SessionOutput, SessionNotFoundError>;
+  readonly findChildren: (parentId: number) => Effect.Effect<SessionOutput[]>;
+  readonly create: (data: CreateSessionInput) => Effect.Effect<SessionOutput, ValidationError>;
+  readonly update: (id: number, data: UpdateSessionInput) => Effect.Effect<SessionOutput, SessionNotFoundError | ValidationError>;
+  readonly delete: (id: number) => Effect.Effect<void, SessionNotFoundError>;
 }
 
 // ============================================
@@ -69,100 +70,111 @@ const serializeSessions = (rows: SessionRow[]): SessionOutput[] =>
 // ============================================
 // Session Service Implementation
 // ============================================
+export class SessionSevice extends Context.Service<SessionSevice, ISessionService>() ("SessionSevice") {}
 
-const createSessionService = (): ISessionService => {
-  const findAll = async ({ agentId, parentId }: { agentId?: string; parentId?: string }): Promise<SessionOutput[]> => {
-    let rows: SessionRow[];
-    
-    if (agentId && parentId) {
-      rows = await db.select().from(schema.sessions).where(
-        and(eq(schema.sessions.agentId, agentId), eq(schema.sessions.parentId, parseInt(parentId)))
-      );
-    } else if (agentId) {
-      rows = await db.select().from(schema.sessions).where(eq(schema.sessions.agentId, agentId));
-    } else if (parentId) {
-      rows = await db.select().from(schema.sessions).where(eq(schema.sessions.parentId, parseInt(parentId)));
-    } else {
-      rows = await db.select().from(schema.sessions).all();
-    }
-    
-    return serializeSessions(rows);
-  };
+export const SessionServiceLive = Layer.effect(
+  SessionSevice,
+  Effect.gen(function* () {
+    const findAll = ({ agentId, parentId }: { agentId?: string; parentId?: string }) => 
+      Effect.gen(function* () {
+        let rows: SessionRow[];
+        
+        if (agentId && parentId) {
+          rows = yield* Effect.promise(() =>  
+            db.select().from(schema.sessions).where(and(
+              eq(schema.sessions.agentId, agentId), 
+              eq(schema.sessions.parentId, parseInt(parentId))
+            ))
+          );
+        } else if (agentId) {
+          rows = yield* Effect.promise(() => 
+            db.select().from(schema.sessions).where(eq(schema.sessions.agentId, agentId))
+          );
+        } else if (parentId) {
+          rows = yield* Effect.promise(() => 
+            db.select().from(schema.sessions).where(eq(schema.sessions.parentId, parseInt(parentId)))
+          );
+        } else {
+          rows = yield* Effect.promise(() => 
+            db.select().from(schema.sessions)
+          );
+        }
+        return serializeSessions(rows);
+    });
 
-  const findById = async (id: number): Promise<SessionOutput> => {
-    const rows = await db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "SessionNotFoundError", id } as SessionNotFoundError;
-    }
-    
-    return serializeSession(rows[0]);
-  };
+    const findById = (id: number) => 
+      Effect.gen(function* (){
+        const [rows]= yield* Effect.promise(() => 
+          db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).limit(1)
+        );
+        
+        if (rows) {
+          return yield* Effect.fail({ _tag: "SessionNotFoundError", id } as SessionNotFoundError);
+        }
+        
+        return serializeSession(rows!);
+      });
 
-  const findChildren = async (parentId: number): Promise<SessionOutput[]> => {
-    const rows = await db.select().from(schema.sessions).where(eq(schema.sessions.parentId, parentId));
-    return serializeSessions(rows);
-  };
+    const findChildren = (parentId: number) => 
+      Effect.gen(function* (){
+        const rows = yield* Effect.promise(() => 
+          db.select().from(schema.sessions).where(eq(schema.sessions.parentId, parentId))
+        );
+        return serializeSessions(rows);
+      });
 
-  const create = async (data: CreateSessionInput): Promise<SessionOutput> => {
-    if (!data.title?.trim()) {
-      throw { _tag: "ValidationError", message: "Title is required" } as ValidationError;
-    }
-    if (!data.agentId) {
-      throw { _tag: "ValidationError", message: "AgentId is required" } as ValidationError;
-    }
+    const create = (data: CreateSessionInput) => 
+      Effect.gen(function*() {
+        if (!data.title?.trim()) {
+          return yield* Effect.fail({ _tag: "ValidationError", message: "Title is required" } as ValidationError);
+        }
+        if (!data.agentId) {
+          return yield* Effect.fail({ _tag: "ValidationError", message: "AgentId is required" } as ValidationError);
+        }
 
-    const rows = await db.insert(schema.sessions).values({
-      title: data.title,
-      agentId: data.agentId,
-      data: data.data ?? null,
-      parentId: data.parentId ?? null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+        const [rows] = yield* Effect.promise(() => 
+          db.insert(schema.sessions).values({
+            title: data.title,
+            agentId: data.agentId,
+            data: data.data ?? null,
+            parentId: data.parentId ?? null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }).returning()
+        );
 
-    return serializeSession(rows[0]);
-  };
+        return serializeSession(rows!);
+      });
 
-  const update = async (id: number, data: UpdateSessionInput): Promise<SessionOutput> => {
-    const rows = await db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "SessionNotFoundError", id } as SessionNotFoundError;
-    }
-    
-    const updated = await db.update(schema.sessions)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(schema.sessions.id, id))
-      .returning();
-    
-    return serializeSession(updated[0]);
-  };
+    const update = (id: number, data: UpdateSessionInput) => 
+      Effect.gen(function* () {
+       yield* findById(id)
+        
+        const [updated] = yield* Effect.promise(() =>
+          db.update(schema.sessions)
+            .set({ ...data, updatedAt: new Date() })
+            .where(eq(schema.sessions.id, id))
+            .returning()
+        );
+        
+        return serializeSession(updated!);
+      });
 
-  const remove = async (id: number): Promise<void> => {
-    const rows = await db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).limit(1);
-    
-    if (rows.length === 0) {
-      throw { _tag: "SessionNotFoundError", id } as SessionNotFoundError;
-    }
-    
-    await db.delete(schema.sessions).where(eq(schema.sessions.id, id)).run();
-  };
+    const remove = (id: number) => 
+      Effect.gen(function* (){
+        yield* findById(id)
+        
+        yield* Effect.promise(() => db.delete(schema.sessions).where(eq(schema.sessions.id, id)));
+      });
 
-  return { findAll, findById, findChildren, create, update, delete: remove } as ISessionService;
-};
+    return SessionSevice.of({
+      findAll,
+      findById,
+      findChildren,
+      create,
+      update,
+      delete: remove
+    });
+}));
 
-// Create and export the session service instance
-const sessionServiceInstance = createSessionService();
 
-// Exports
-export {
-  sessionServiceInstance,
-  createSessionService,
-  type ISessionService,
-  type SessionOutput,
-  type CreateSessionInput,
-  type UpdateSessionInput,
-  type SessionNotFoundError,
-  type ValidationError,
-};
