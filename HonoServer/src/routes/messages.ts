@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
-import { messageServiceInstance } from '../services';
+import { Runtime } from "../effects"
+import { MessageService } from '../services/message.service';
 
 const app = new Hono();
 
@@ -42,7 +43,7 @@ app.get(
   zValidator('query', MessageQuerySchema),
   async (c) => {
     const { subSessionId, parentId } = c.req.valid('query');
-    const messages = await messageServiceInstance.findAll({ subSessionId, parentId });
+    const messages = await Runtime.runPromise(MessageService.use(svc => svc.findAll({ subSessionId, parentId })));
     return c.json(messages);
   }
 );
@@ -56,7 +57,7 @@ app.post(
   zValidator('json', CreateMessageSchema),
   async (c) => {
     const data = c.req.valid('json');
-    const message = await messageServiceInstance.create(data);
+    const message = await Runtime.runPromise(MessageService.use(svc => svc.create(data)));
     return c.json(message, 201);
   }
 );
@@ -73,15 +74,8 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    try {
-      const message = await messageServiceInstance.findById(parseInt(id));
-      return c.json(message);
-    } catch (error) {
-      if (error._tag === 'MessageNotFoundError') {
-        return c.json({ error: 'Message not found' }, 404);
-      }
-      throw error;
-    }
+    const message = await Runtime.runPromise(MessageService.use(svc => svc.findById(parseInt(id))));
+    return c.json(message);
   }
 );
 
@@ -99,15 +93,8 @@ app.put(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    try {
-      const message = await messageServiceInstance.update(parseInt(id), data);
-      return c.json(message);
-    } catch (error) {
-      if (error._tag === 'MessageNotFoundError') {
-        return c.json({ error: 'Message not found' }, 404);
-      }
-      throw error;
-    }
+    const message = await Runtime.runPromise(MessageService.use(svc => svc.update(parseInt(id), data)));
+    return c.json(message);
   }
 );
 
@@ -117,15 +104,8 @@ app.delete(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    try {
-      await messageServiceInstance.delete(parseInt(id));
-      return c.json({ success: true });
-    } catch (error) {
-      if (error._tag === 'MessageNotFoundError') {
-        return c.json({ error: 'Message not found' }, 404);
-      }
-      throw error;
-    }
+    await Runtime.runPromise(MessageService.use(svc => svc.delete(parseInt(id))));
+    return c.json({ success: true });
   }
 );
 
@@ -138,7 +118,7 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    const messages = await messageServiceInstance.findReplies(parseInt(id));
+    const messages = await Runtime.runPromise(MessageService.use(svc => svc.findReplies(parseInt(id))));
     return c.json(messages);
   }
 );
@@ -158,7 +138,7 @@ app.post(
       ...data,
       parentId: parseInt(id)
     };
-    const message = await messageServiceInstance.create(messageData);
+    const message = await Runtime.runPromise(MessageService.use(svc => svc.create(messageData)));
     return c.json(message, 201);
   }
 );

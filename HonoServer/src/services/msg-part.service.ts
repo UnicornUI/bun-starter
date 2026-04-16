@@ -90,15 +90,15 @@ export const MsgPartServiceLive = Layer.effect(
 
     const findById = (id: number) => 
       Effect.gen(function* () {
-        const rows = yield* Effect.promise(() => 
+        const [rows] = yield* Effect.promise(() => 
           db.select().from(schema.msgParts).where(eq(schema.msgParts.id, id)).limit(1)
         );
       
-        if (rows.length === 0) {
+        if (!rows) {
           return yield* Effect.fail({ _tag: "MsgPartNotFoundError", id } as MsgPartNotFoundError);
         }
       
-        return serializeMsgPart(rows[0]!);
+        return serializeMsgPart(rows!);
       });
 
     const create = (messageId: number, data: CreateMsgPartInput) => 

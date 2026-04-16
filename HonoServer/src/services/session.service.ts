@@ -1,6 +1,6 @@
 import { eq, and } from "drizzle-orm";
 import { db, schema } from "../db";
-import { Context, Layer, Effect } from "effect";
+import { Context, Layer, Effect, Console } from "effect";
 
 // Types
 type SessionRow = typeof schema.sessions.$inferSelect;
@@ -70,10 +70,10 @@ const serializeSessions = (rows: SessionRow[]): SessionOutput[] =>
 // ============================================
 // Session Service Implementation
 // ============================================
-export class SessionSevice extends Context.Service<SessionSevice, ISessionService>() ("SessionSevice") {}
+export class SessionService extends Context.Service<SessionService, ISessionService>() ("SessionSevice") {}
 
 export const SessionServiceLive = Layer.effect(
-  SessionSevice,
+  SessionService,
   Effect.gen(function* () {
     const findAll = ({ agentId, parentId }: { agentId?: string; parentId?: string }) => 
       Effect.gen(function* () {
@@ -107,8 +107,7 @@ export const SessionServiceLive = Layer.effect(
         const [rows]= yield* Effect.promise(() => 
           db.select().from(schema.sessions).where(eq(schema.sessions.id, id)).limit(1)
         );
-        
-        if (rows) {
+        if (!rows) {
           return yield* Effect.fail({ _tag: "SessionNotFoundError", id } as SessionNotFoundError);
         }
         
@@ -167,7 +166,7 @@ export const SessionServiceLive = Layer.effect(
         yield* Effect.promise(() => db.delete(schema.sessions).where(eq(schema.sessions.id, id)));
       });
 
-    return SessionSevice.of({
+    return SessionService.of({
       findAll,
       findById,
       findChildren,

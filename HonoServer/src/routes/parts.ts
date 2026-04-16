@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
-import { msgPartServiceInstance } from '../services';
+import { Runtime } from "../effects"
+import { Effect } from "effect"
+import { MsgPartService } from '../services/msg-part.service';
 
 const app = new Hono();
 
@@ -38,7 +40,7 @@ app.get(
   zValidator('param', z.object({ messageId: z.string() })),
   async (c) => {
     const { messageId } = c.req.valid('param');
-    const msgParts = await msgPartServiceInstance.findByMessageId(parseInt(messageId));
+    const msgParts = await Runtime.runPromise(MsgPartService.use(svc => svc.findByMessageId(parseInt(messageId))));
     return c.json(msgParts);
   }
 );
@@ -54,7 +56,7 @@ app.post(
   async (c) => {
     const { messageId } = c.req.valid('param');
     const data = c.req.valid('json');
-    const msgPart = await msgPartServiceInstance.create(parseInt(messageId), data);
+    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.create(parseInt(messageId), data))); 
     return c.json(msgPart, 201);
   }
 );
@@ -71,15 +73,8 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    try {
-      const msgPart = await msgPartServiceInstance.findById(parseInt(id));
-      return c.json(msgPart);
-    } catch (error) {
-      if (error._tag === 'MsgPartNotFoundError') {
-        return c.json({ error: 'MsgPart not found' }, 404);
-      }
-      throw error;
-    }
+    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.findById(parseInt(id))));
+    return c.json(msgPart);
   }
 );
 
@@ -97,15 +92,8 @@ app.put(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    try {
-      const msgPart = await msgPartServiceInstance.update(parseInt(id), data);
-      return c.json(msgPart);
-    } catch (error) {
-      if (error._tag === 'MsgPartNotFoundError') {
-        return c.json({ error: 'MsgPart not found' }, 404);
-      }
-      throw error;
-    }
+    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.update(parseInt(id), data)));
+    return c.json(msgPart);
   }
 );
 
@@ -115,15 +103,8 @@ app.delete(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    try {
-      await msgPartServiceInstance.delete(parseInt(id));
-      return c.json({ success: true });
-    } catch (error) {
-      if (error._tag === 'MsgPartNotFoundError') {
-        return c.json({ error: 'MsgPart not found' }, 404);
-      }
-      throw error;
-    }
+    await Runtime.runPromise(MsgPartService.use(svc => svc.delete(parseInt(id))));
+    return c.json({ success: true });
   }
 );
 

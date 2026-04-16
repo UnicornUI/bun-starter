@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
-import { sessionServiceInstance } from '../services/session.service';
+import { Runtime } from "../effects"
+import { Effect } from "effect"
+import { SessionService } from '../services/session.service';
 
 const app = new Hono();
 
@@ -45,7 +47,10 @@ app.get(
   zValidator('query', SessionListQuery),
   async (c) => {
     const { agentId, parentId } = c.req.valid('query');
-    const sessions = await sessionServiceInstance.findAll({ agentId, parentId });
+    const sessions = await Runtime.runPromise(Effect.gen(function* () {
+      const service = yield* SessionService
+      return yield* service.findAll({ agentId, parentId })
+    }))
     return c.json(sessions);
   }
 );
@@ -61,7 +66,7 @@ app.post(
   zValidator('json', CreateSessionSchema),
   async (c) => {
     const data = c.req.valid('json');
-    const session = await sessionServiceInstance.create(data);
+    const session = await Runtime.runPromise(SessionService.use(svc => svc.create(data)))
     return c.json(session, 201);
   }
 );
@@ -78,15 +83,8 @@ app.get(
   zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    try {
-      const session = await sessionServiceInstance.findById(parseInt(id));
-      return c.json(session);
-    } catch (error) {
-      if (error._tag === 'SessionNotFoundError') {
-        return c.json({ error: 'Session not found' }, 404);
-      }
-      throw error;
-    }
+    const session = await Runtime.runPromise(SessionService.use((svc) => svc.findById(parseInt(id))));
+    return c.json(session);
   }
 );
 
@@ -104,15 +102,8 @@ app.put(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    try {
-      const session = await sessionServiceInstance.update(parseInt(id), data);
-      return c.json(session);
-    } catch (error) {
-      if (error._tag === 'SessionNotFoundError') {
-        return c.json({ error: 'Session not found' }, 404);
-      }
-      throw error;
-    }
+    const session = await Runtime.runPromise(SessionService.use(svc => svc.update(parseInt(id), data)));
+    return c.json(session);
   }
 );
 
@@ -122,15 +113,8 @@ app.delete(
   zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    try {
-      await sessionServiceInstance.delete(parseInt(id));
-      return c.json({ success: true });
-    } catch (error) {
-      if (error._tag === 'SessionNotFoundError') {
-        return c.json({ error: 'Session not found' }, 404);
-      }
-      throw error;
-    }
+    await Runtime.runPromise(SessionService.use(svc => svc.delete(parseInt(id))));
+    return c.json({ success: true });
   }
 );
 
@@ -143,7 +127,7 @@ app.get(
   zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    const sessions = await sessionServiceInstance.findChildren(parseInt(id));
+    const sessions = await Runtime.runPromise(SessionService.use(svc => svc.findChildren(parseInt(id))));
     return c.json(sessions);
   }
 );
@@ -163,7 +147,7 @@ app.post(
       ...data,
       parentId: parseInt(id)
     };
-    const session = await sessionServiceInstance.create(sessionData);
+    const session = await Runtime.runPromise(SessionService.use(svc => svc.create(sessionData)));
     return c.json(session, 201);
   }
 );

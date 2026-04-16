@@ -106,13 +106,13 @@ export const MessageServiceLive = Layer.effect(
 
     const findById = (id: number)=> 
       Effect.gen(function* () {
-        const rows = yield* Effect.promise(() => 
+        const [rows] = yield* Effect.promise(() => 
           db.select().from(schema.messages).where(eq(schema.messages.id, id)).limit(1)
         );
-        if (rows.length === 0) {
+        if (!rows) {
           return yield* Effect.fail({ _tag: "MessageNotFoundError", id } as MessageNotFoundError);
         }
-        return serializeMessage(rows[0]!);
+        return serializeMessage(rows!);
       });
 
     const findReplies = (parentId: number) => 
