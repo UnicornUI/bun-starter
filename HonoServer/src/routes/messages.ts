@@ -3,7 +3,7 @@ import { describeRoute, resolver, validator as zValidator } from 'hono-openapi';
 import { z } from 'zod';
 import { Runtime } from "../effects"
 import { MessageService } from '../services/message.service';
-import { createdResponse } from '../errors';
+import { createdResponse } from '../utils/response';
 
 const app = new Hono();
 

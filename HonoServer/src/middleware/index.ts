@@ -1,6 +1,6 @@
 import type { Context, ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { AppError } from "./types";
+import { AppError } from "../errors/types";
 import { errorResponse } from "../utils/response";
 
 export const errorMiddleware: ErrorHandler = async (err: Error, c: Context) => {
@@ -102,7 +102,7 @@ function extractZodErrors(err: Error): Array<{ path: string; message: string }> 
 }
 
 
-export function extractEffectError(err: unknown): AppError | undefined {
+function extractEffectError(err: unknown): AppError | undefined {
   const cause = (err as any)?.cause;
   if (!cause) return undefined;
 
@@ -121,7 +121,7 @@ const StatusMap: Record<string, number> = {
   ValidationError: 400,
 };
 
-export function getStatus(error: AppError | unknown): number {
+function getStatus(error: AppError | unknown): number {
   if (error instanceof AppError) {
     return StatusMap[error.name] ?? 500;
   }

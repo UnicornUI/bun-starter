@@ -1,13 +1,8 @@
 import { eq } from "drizzle-orm";
-import { db, schema } from "../db";
 import { Context, Effect, Layer } from "effect";
+import { Database } from "../db/service";
 import { MessageNotFoundError, ValidationError } from "../errors";
-
-// ============================================
-// 1. Types
-// ============================================
-
-export type MessageRow = typeof schema.messages.$inferSelect;
+import type { Message as MessageRow } from "../db/schema";
 
 // ============================================
 // 2. Message Service Interface
@@ -76,6 +71,8 @@ export class MessageService extends Context.Service<MessageService, IMessageServ
 export const MessageServiceLive = Layer.effect(
   MessageService,
   Effect.gen(function* () {
+    const { db, schema } = yield* Database;
+
     const findAll = ({ subSessionId, parentId }: MessageQuery) => 
       Effect.gen(function* () {
         let rows: MessageRow[];

@@ -1,11 +1,11 @@
 import chalk from 'chalk';
-import { sqlite } from '../../db/index';
 import { initializeDatabase } from '../../db/init';
+import { sqlite } from "../../db/service"
 
 const dbHandlers = {
   init: async () => {
     console.log(chalk.cyan('Initializing database...'));
-    initializeDatabase();
+    initializeDatabase(sqlite);
     console.log(chalk.green('✓ Database initialized successfully!'));
   },
   tables: async () => {

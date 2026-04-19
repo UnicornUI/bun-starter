@@ -1,14 +1,12 @@
 import { eq, and } from "drizzle-orm";
-import { db, schema } from "../db";
 import { Context, Layer, Effect } from "effect";
+import { Database } from "../db/service";
+import type { Session as SessionRow } from "../db/schema";
 import {
   SessionNotFoundError,
   ValidationError,
   SessionValidationError,
 } from "../errors";
-
-// Types
-type SessionRow = typeof schema.sessions.$inferSelect;
 
 // ============================================
 // Session Service Interface
@@ -72,7 +70,9 @@ export class SessionService extends Context.Service<SessionService, ISessionServ
 export const SessionServiceLive = Layer.effect(
   SessionService,
   Effect.gen(function* () {
-    const findAll = ({ agentId, parentId }: { agentId?: string; parentId?: string }) => 
+    const { db, schema } = yield* Database;
+
+    const findAll = ({ agentId, parentId }: { agentId?: string; parentId?: string }) =>
       Effect.gen(function* () {
         let rows: SessionRow[];
         

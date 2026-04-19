@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { swaggerUI } from '@hono/swagger-ui';
 import { openAPIRouteHandler } from 'hono-openapi';
-import { errorMiddleware } from '../errors/middleware';
+import { errorMiddleware } from '../middleware';
 import sessions from './sessions';
 import messages from './messages';
 import parts from './parts';

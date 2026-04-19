@@ -1,13 +1,9 @@
 import { eq } from "drizzle-orm";
-import { db, schema } from "../db";
+import type { MsgPart as MsgPartRow } from "../db/schema";
 import { Effect, Context, Layer } from "effect";
+import { Database } from "../db/service";
 import { MsgPartNotFoundError, ValidationError } from "../errors";
 
-// ============================================
-// 1. Types
-// ============================================
-
-export type MsgPartRow = typeof schema.msgParts.$inferSelect;
 
 // ============================================
 // 2. MsgPart Service Interface
@@ -73,6 +69,8 @@ export class MsgPartService extends Context.Service<MsgPartService, IMsgPartServ
 export const MsgPartServiceLive = Layer.effect(
   MsgPartService,
   Effect.gen(function* (){
+    const { db, schema } = yield* Database;
+
     const findByMessageId = (messageId: number) => 
       Effect.gen(function* (){
         const rows = yield* Effect.promise(() =>

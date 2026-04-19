@@ -1,6 +1,4 @@
-import { sqlite } from './index';
-
-export function initializeDatabase(): void {
+export function initializeDatabase(sqlite: any): void {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,10 +36,4 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_messages_parent_id ON messages(parent_id);
     CREATE INDEX IF NOT EXISTS idx_msg_parts_message_id ON msg_parts(message_id);
   `);
-}
-
-if (require.main === module) {
-  console.log('Initializing database...');
-  initializeDatabase();
-  console.log('Database initialized successfully!');
 }
