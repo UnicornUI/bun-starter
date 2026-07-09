@@ -101,10 +101,9 @@ function greetUser(id: string) {
 // 4. this 传递
 
 {
-
   class Olass {
     readonly local = 1
-    compute = Effect.gen(this, function* () {
+    compute = Effect.gen({ self: this }, function* () {
       const n = this.local + 1
 
       yield* Effect.log(`computed value: ${n}`)
@@ -114,6 +113,5 @@ function greetUser(id: string) {
   }
 
   Effect.runPromise(new Olass().compute).then(console.log)
-
 }
 
