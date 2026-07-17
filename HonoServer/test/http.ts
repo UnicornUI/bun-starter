@@ -17,13 +17,6 @@ const withTransientReadRetry = <E, R>(client: HttpClient.HttpClient.With<E, R>) 
     }),
   )
 
-const makeHttp = Effect.gen(function* () {
-  return HttpClient.filterStatusOk(
-    withTransientReadRetry(yield* HttpClient.HttpClient),
-  )
-})
-
-
 const writeWithDirs = Effect.fn("FileSystem.writeWithDirs")(function* (
   fs: FileSystem.FileSystem,
   path: string,
@@ -90,6 +83,12 @@ const makeMockHttpClient = (
       Effect.map((res) => HttpClientResponse.fromWeb(req, res)),
     ),
   )
+
+const makeHttp = Effect.gen(function* () {
+  return HttpClient.filterStatusOk(
+    withTransientReadRetry(yield* HttpClient.HttpClient),
+  )
+})
 
 const makeTestFs = (overrides: Partial<FileSystem.FileSystem> = {}) =>
   Layer.succeed(FileSystem.FileSystem, FileSystem.makeNoop(overrides))

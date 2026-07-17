@@ -1,10 +1,10 @@
 import { Effect, pipe } from "effect"
+import {
+  fetchTransactionAmount
+} from "./mockApi"
 
 // Function to add a small service charg to transation amount
 const addServiceCharg = (amount: number)  => amount + 1
-
-// Simulated asynchoronous task to fetch a transaction amount from database
-const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
 
 // apply service charg to the transaction amount
 

@@ -1,14 +1,10 @@
 import { Effect, pipe, Option, Result } from "effect"
 
-const applyDiscount = (
-  total: number,
-  discountRate: number,
-): Effect.Effect<number, Error> =>
-  discountRate === 0
-    ? Effect.fail(new Error("discount rate cannot be zero"))
-    : Effect.succeed(total - (total * discountRate) / 100)
+import { 
+  applyDiscount,
+  fetchTransactionAmount
+} from "./mockApi" 
 
-const fetchTransactionAmount = Effect.promise(() => Promise.resolve(100))
 
 // ⚠️ effect@4.x 中 `Effect.andThen` 回调必须返回 `Effect`；直接返回值会触发
 //    `Fiber.runLoop: Not a valid effect: <value>` 错误（v3 没这个限制）。

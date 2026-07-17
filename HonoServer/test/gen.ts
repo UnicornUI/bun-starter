@@ -1,4 +1,8 @@
 import { Console, Effect } from "effect"
+import { 
+  applyDiscount,
+  fetchTransactionAmount
+} from "./mockApi"
 
   // 
   // 1.let explore a practical program that preferms a series of data transformations commonly found in application logic
@@ -9,17 +13,6 @@ import { Console, Effect } from "effect"
   const addServiceCharge = (amount: number) => amount + 1
 
 
-  // Funtion to apply a disconut safely to a transation amount
-  const applyDiscount = (total: number, discountRate: number) => 
-    discountRate === 0 
-    ? Effect.fail(new Error("discount rate cannot be zero")) 
-    : Effect.succeed(total - (total * discountRate) / 100) 
-
-
-  //Simulated asynchoronous task to fetch a transaction amount from a database
-  const fetchTransactionAmonut = Effect.promise(()=> Promise.resolve(1000))
-
-
   // Simulated asynchoronous task to fetch a discount rate from a configuration file
   const fetchDiscountRate = Effect.promise(() => Promise.resolve(5))
 
@@ -28,7 +21,7 @@ import { Console, Effect } from "effect"
   const program = Effect.gen(function* (){
 
     // retrieve the transation amount
-    const transactionAmount = yield* fetchTransactionAmonut
+    const transactionAmount = yield* fetchTransactionAmount
 
     // retrieve the discount rate
     const discountRate = yield* fetchDiscountRate
