@@ -8,8 +8,9 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts serve",
     "build": "bun build src/index.ts --target=bun --outfile=dist/index.js",
-    "build:exe": "bun build src/index.ts --compile --outfile=dist/hono-server",
-    "start": "bun run src/index.ts serve"
+    "build:bin": "bun build src/index.ts --compile --outfile=dist/hono-server",
+    "start": "bun run src/index.ts serve",
+    "debug": "bun run --inspect --conditions=browser src/index.ts serve"
   },
   "dependencies": {
     "@effect/language-service": "^0.84.3",
@@ -33,7 +34,7 @@
   "devDependencies": {
     "@tsconfig/bun": "^1.0.10",
     "@types/bun": "^1.3.14",
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.1.1",
     "@types/yargs": "^17.0.35",
     "bun-types": "latest",
     "drizzle-kit": "^0.20.18"
