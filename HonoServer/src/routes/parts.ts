@@ -40,7 +40,7 @@ app.get(
   zValidator('param', z.object({ messageId: z.string() })),
   async (c) => {
     const { messageId } = c.req.valid('param');
-    const msgParts = await Runtime.runPromise(MsgPartService.use(svc => svc.findByMessageId(parseInt(messageId))));
+    const msgParts = await Runtime.runPromise(MsgPartService.use(svc => svc.findByMessageId(parseInt(messageId, 10))));
     return c.json(createdResponse(msgParts));
   }
 );
@@ -56,7 +56,7 @@ app.post(
   async (c) => {
     const { messageId } = c.req.valid('param');
     const data = c.req.valid('json');
-    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.create(parseInt(messageId), data))); 
+    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.create(parseInt(messageId, 10), data))); 
     return c.json(createdResponse(msgPart), 201);
   }
 );
@@ -73,7 +73,7 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.findById(parseInt(id))));
+    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.findById(parseInt(id, 10))));
     return c.json(createdResponse(msgPart));
   }
 );
@@ -92,7 +92,7 @@ app.put(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.update(parseInt(id), data)));
+    const msgPart = await Runtime.runPromise(MsgPartService.use(svc => svc.update(parseInt(id, 10), data)));
     return c.json(createdResponse(msgPart));
   }
 );
@@ -103,7 +103,7 @@ app.delete(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    await Runtime.runPromise(MsgPartService.use(svc => svc.delete(parseInt(id))));
+    await Runtime.runPromise(MsgPartService.use(svc => svc.delete(parseInt(id, 10))));
     return c.json(createdResponse({ success: true }));
   }
 );

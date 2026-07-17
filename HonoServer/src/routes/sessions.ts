@@ -84,7 +84,7 @@ app.get(
   zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    const session = await Runtime.runPromise(SessionService.use((svc) => svc.findById(parseInt(id))));
+    const session = await Runtime.runPromise(SessionService.use((svc) => svc.findById(parseInt(id, 10))));
     return c.json(createdResponse(session));
   }
 );
@@ -103,7 +103,7 @@ app.put(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    const session = await Runtime.runPromise(SessionService.use(svc => svc.update(parseInt(id), data)));
+    const session = await Runtime.runPromise(SessionService.use(svc => svc.update(parseInt(id, 10), data)));
     return c.json(createdResponse(session));
   }
 );
@@ -114,7 +114,7 @@ app.delete(
   zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    await Runtime.runPromise(SessionService.use(svc => svc.delete(parseInt(id))));
+    await Runtime.runPromise(SessionService.use(svc => svc.delete(parseInt(id, 10))));
     return c.json(createdResponse({ success: true}));
   }
 );
@@ -128,7 +128,7 @@ app.get(
   zValidator('param', IdParam),
   async (c) => {
     const { id } = c.req.valid('param');
-    const sessions = await Runtime.runPromise(SessionService.use(svc => svc.findChildren(parseInt(id))));
+    const sessions = await Runtime.runPromise(SessionService.use(svc => svc.findChildren(parseInt(id, 10))));
     return c.json(createdResponse(sessions));
   }
 );
@@ -146,7 +146,7 @@ app.post(
     const data = c.req.valid('json');
     const sessionData = {
       ...data,
-      parentId: parseInt(id)
+      parentId: parseInt(id, 10)
     };
     const session = await Runtime.runPromise(SessionService.use(svc => svc.create(sessionData)));
     return c.json(createdResponse(session), 201);

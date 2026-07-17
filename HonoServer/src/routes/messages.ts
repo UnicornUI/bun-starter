@@ -75,7 +75,7 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    const message = await Runtime.runPromise(MessageService.use(svc => svc.findById(parseInt(id))));
+    const message = await Runtime.runPromise(MessageService.use(svc => svc.findById(parseInt(id, 10))));
     return c.json(createdResponse(message));
   }
 );
@@ -94,7 +94,7 @@ app.put(
   async (c) => {
     const { id } = c.req.valid('param');
     const data = c.req.valid('json');
-    const message = await Runtime.runPromise(MessageService.use(svc => svc.update(parseInt(id), data)));
+    const message = await Runtime.runPromise(MessageService.use(svc => svc.update(parseInt(id, 10), data)));
     return c.json(createdResponse(message));
   }
 );
@@ -105,7 +105,7 @@ app.delete(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    await Runtime.runPromise(MessageService.use(svc => svc.delete(parseInt(id))));
+    await Runtime.runPromise(MessageService.use(svc => svc.delete(parseInt(id, 10))));
     return c.json(createdResponse({ success: true }));
   }
 );
@@ -119,7 +119,7 @@ app.get(
   zValidator('param', z.object({ id: z.string() })),
   async (c) => {
     const { id } = c.req.valid('param');
-    const messages = await Runtime.runPromise(MessageService.use(svc => svc.findReplies(parseInt(id))));
+    const messages = await Runtime.runPromise(MessageService.use(svc => svc.findReplies(parseInt(id, 10))));
     return c.json(createdResponse(messages));
   }
 );
@@ -137,7 +137,7 @@ app.post(
     const data = c.req.valid('json');
     const messageData = {
       ...data,
-      parentId: parseInt(id)
+      parentId: parseInt(id, 10)
     };
     const message = await Runtime.runPromise(MessageService.use(svc => svc.create(messageData)));
     return c.json(createdResponse(message), 201);
